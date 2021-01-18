@@ -13,11 +13,6 @@ import javax.annotation.PostConstruct;
 @Slf4j
 public class OrderEventsConsumer {
 
-    @PostConstruct
-    public void test(){
-        log.info("---- PostConstruct ----" );
-
-    }
 
 
     @KafkaListener(topics = {"order-events"})
