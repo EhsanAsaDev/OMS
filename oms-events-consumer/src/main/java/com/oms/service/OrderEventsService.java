@@ -9,7 +9,11 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
+import org.springframework.util.concurrent.ListenableFuture;
+
+import java.util.Optional;
 
 @Service
 @Slf4j
@@ -28,12 +32,37 @@ public class OrderEventsService {
         OrderEvent orderEvent = objectMapper.readValue(consumerRecord.value(), OrderEvent.class);
         log.info("orderEvent : {} ", orderEvent);
 
-        if (orderEvent.getId() != null && orderEvent.getId() == 000) {
+        if (orderEvent.getId() != null && orderEvent.getId() == 0l) {
             throw new RecoverableDataAccessException("Temporary Network Issue");
         }
 
+
+        switch(orderEvent.getOrder().getType()){
+            case TYPE1:
+                save(orderEvent);
+                break;
+            case TYPE2:
+                //validate the orderEvent
+                validate(orderEvent);
+                save(orderEvent);
+                break;
+            default:
+                log.info("Invalid Library Event Type");
+        }
         save(orderEvent);
 
+    }
+
+    private void validate(OrderEvent orderEvent) {
+        if(orderEvent.getId()==null){
+            throw new IllegalArgumentException("Order Event Id is missing");
+        }
+
+        Optional<OrderEvent> orderEventOptional = orderEventsRepository.findById(orderEvent.getId());
+        if(!orderEventOptional.isPresent()){
+            throw new IllegalArgumentException("Not a valid library Event");
+        }
+        log.info("Validation is successful for the library Event : {} ", orderEventOptional.get());
     }
 
 
@@ -43,35 +72,15 @@ public class OrderEventsService {
         log.info("Successfully Persisted the order event {} ", orderEvent);
     }
 
-  /*  public void handleRecovery(ConsumerRecord<Integer,String> record){
+    public void handleRecovery(ConsumerRecord<Long,String> record){
+        log.error("handleRecovery for {}", record);
 
-        Integer key = record.key();
-        String message = record.value();
+        Long key = record.key();
+        String message = record.value().replace(":0",":-1");
 
-        ListenableFuture<SendResult<Integer,String>> listenableFuture = kafkaTemplate.sendDefault(key, message);
-        listenableFuture.addCallback(new ListenableFutureCallback<SendResult<Integer, String>>() {
-            @Override
-            public void onFailure(Throwable ex) {
-                handleFailure(key, message, ex);
-            }
+        ListenableFuture<SendResult<Long,String>> listenableFuture = kafkaTemplate.sendDefault(key, message);
+        listenableFuture.addCallback(new OrderEventListenableFutureCallback(key,message));
 
-            @Override
-            public void onSuccess(SendResult<Integer, String> result) {
-                handleSuccess(key, message, result);
-            }
-        });
     }
 
-    private void handleFailure(Integer key, String value, Throwable ex) {
-        log.error("Error Sending the Message and the exception is {}", ex.getMessage());
-        try {
-            throw ex;
-        } catch (Throwable throwable) {
-            log.error("Error in OnFailure: {}", throwable.getMessage());
-        }
-    }
-
-    private void handleSuccess(Integer key, String value, SendResult<Integer, String> result) {
-        log.info("Message Sent SuccessFully for the key : {} and the value is {} , partition is {}", key, value, result.getRecordMetadata().partition());
-    }*/
 }

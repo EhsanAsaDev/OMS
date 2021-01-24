@@ -1,5 +1,6 @@
 package com.oms.config;
 
+import com.oms.service.OrderEventsService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.beans.factory.ObjectProvider;
@@ -27,12 +28,13 @@ import java.util.Map;
 
 @Configuration
 @EnableKafka
+@Slf4j
 public class OrderEventsConsumerConfig {
 
-  /*  @Autowired
-    LibraryEventsService libraryEventsService;*/
+    @Autowired
+    OrderEventsService orderEventsService;
 
-   @Autowired
+    @Autowired
     KafkaProperties kafkaProperties;
 
 
@@ -46,7 +48,57 @@ public class OrderEventsConsumerConfig {
                 .getIfAvailable(() -> new DefaultKafkaConsumerFactory<>(this.kafkaProperties.buildConsumerProperties())));
         factory.setConcurrency(3);
         //factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
+
+        factory.setErrorHandler(((thrownException, data) -> {
+            log.info("Exception in consumerConfig is {} and the record is {}", thrownException.getMessage(), data);
+            //persist
+        }));
+        factory.setRetryTemplate(retryTemplate());
+
+        //config recovery
+        factory.setRecoveryCallback((context -> {
+            if(context.getLastThrowable().getCause() instanceof RecoverableDataAccessException){
+                //invoke recovery logic
+                log.info("Inside the recoverable logic");
+                Arrays.asList(context.attributeNames())
+                        .forEach(attributeName -> {
+                            log.info("Attribute name is : {} ", attributeName);
+                            log.info("Attribute Value is : {} ", context.getAttribute(attributeName));
+                        });
+
+                ConsumerRecord<Long, String> consumerRecord = (ConsumerRecord<Long, String>) context.getAttribute("record");
+                orderEventsService.handleRecovery(consumerRecord);
+            }else{
+                log.info("Inside the non recoverable logic");
+                throw new RuntimeException(context.getLastThrowable().getMessage());
+            }
+
+
+            return null;
+        }));
+
         return factory;
     }
 
+
+    private RetryTemplate retryTemplate() {
+
+        FixedBackOffPolicy fixedBackOffPolicy = new FixedBackOffPolicy();
+        fixedBackOffPolicy.setBackOffPeriod(1000);
+        RetryTemplate retryTemplate = new RetryTemplate();
+        retryTemplate.setRetryPolicy(simpleRetryPolicy());
+        retryTemplate.setBackOffPolicy(fixedBackOffPolicy);
+        return  retryTemplate;
+    }
+
+    private RetryPolicy simpleRetryPolicy() {
+
+       /* SimpleRetryPolicy simpleRetryPolicy = new SimpleRetryPolicy();
+        simpleRetryPolicy.setMaxAttempts(3);*/
+        Map<Class<? extends Throwable>, Boolean> exceptionsMap = new HashMap<>();
+        exceptionsMap.put(IllegalArgumentException.class, false);
+        exceptionsMap.put(RecoverableDataAccessException.class, true);
+        SimpleRetryPolicy simpleRetryPolicy = new SimpleRetryPolicy(3,exceptionsMap,true);
+        return simpleRetryPolicy;
+    }
 }

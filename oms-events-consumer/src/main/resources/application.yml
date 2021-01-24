@@ -16,9 +16,8 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       group-id: order-events-listener-group
     producer:
-      bootstrap-servers:
-        -   localhost:9092,localhost:9093,localhost:9094
-      key-serializer: org.apache.kafka.common.serialization.IntegerSerializer
+      bootstrap-servers: localhost:9092,localhost:9093,localhost:9094
+      key-serializer: org.apache.kafka.common.serialization.LongSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
   datasource:
     url: jdbc:h2:mem:testdb
@@ -55,7 +54,7 @@ spring:
     producer:
       bootstrap-servers:
         -   localhost:9095,localhost:9096,localhost:9097
-      key-serializer: org.apache.kafka.common.serialization.IntegerSerializer
+      key-serializer: org.apache.kafka.common.serialization.LongDeserializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
     properties:
       security:

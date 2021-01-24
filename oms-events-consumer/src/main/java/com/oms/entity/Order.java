@@ -16,9 +16,11 @@ import javax.persistence.*;
 public class Order {
     @Id
     private Long id;
+
     @Enumerated(EnumType.STRING)
     private OrderType type;
+
     @OneToOne
-    @JoinColumn(name = "id")
+    @JoinColumn(name = "orderEventId")
     private OrderEvent orderEvent;
 }
